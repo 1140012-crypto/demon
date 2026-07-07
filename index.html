@@ -1,20 +1,10 @@
-沒問題！既然要挑戰極限，我們就直接把難度調到最高！
-
-我幫你把剛剛的版本修改成「地獄特訓版」，核心調整如下：
-
-* **水管超多**：水管間距（`gap`）縮小，且移動速度（`speed`）直接翻倍，讓水管像排山倒海一樣接連過來。
-* **下落速度極快**：重力（`gravity`）與拍擊跳躍力（`flapPower`）同步大幅調高，小鳥的下落和上升會變得非常暴力、迅速。
-* **坐姿開局與無敵依舊完美運作**：在這種瘋狂難度下，只要你突然站起來，依然能觸發 5 秒無敵防護罩來保命！
-
-以下是修改後的完整程式碼：
-
-```html
+HTML
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>體感 Flappy Bird (地獄特訓風暴版)</title>
+    <title>體感/鍵盤雙模 Flappy Bird (暴速地獄防護罩版)</title>
     <style>
         html, body {
             margin: 0;
@@ -37,7 +27,7 @@
             transform: translate(-50%, -50%);
             font-size: 28px;
             font-weight: bold;
-            color: #00ff00;
+            color: #ff3333;
             text-align: center;
             z-index: 10;
         }
@@ -69,11 +59,10 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"></script>
 </head>
 <body>
 
-    <div id="loading">載入 AI 模型與要求攝影機權限中...</div>
+    <div id="loading">載入地獄級 AI 模型與要求攝影機權限中...</div>
     
     <div id="cameraSelectContainer">
         <label for="cameraSelect">📷 選擇鏡頭:</label>
@@ -99,40 +88,26 @@
         };
         let currentState = STATES.LOADING;
 
-        // --- MQTT 初始化設定 ---
-        const mqttClient = mqtt.connect('wss://mqttgo.io:8084/mqtt');
-
-        mqttClient.on('connect', () => {
-            console.log('MQTTGO.io 伺服器連線成功！');
-        });
-
-        mqttClient.on('error', (err) => {
-            console.error('MQTTGO 連線失敗:', err);
-        });
-
-        // --- 遊戲變數（難度已大幅調升） ---
+        // --- 【暴速參數調整】遊戲變數 ---
         const WIDTH = canvasElement.width;
         const HEIGHT = canvasElement.height;
         const GROUND_HEIGHT = 50; 
         
-        // 【地獄難度參數】大幅拉高重力與跳躍力，製造高速下落感
-        let bird = { x: WIDTH / 2, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.9, flapPower: -15 };
-        // 【地獄難度參數】水管移動速度加倍 (6 -> 12)，安全間隙變窄 (280 -> 200)
-        let pipe = { x: WIDTH, width: 90, gap: 200, speed: 12, topHeight: 0 }; 
+        // 大幅提高重力 (0.5 -> 1.2) 與跳躍力 (-10 -> -16)，下墜速度極快
+        let bird = { x: WIDTH / 2, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 1.2, flapPower: -16 };
+        // 大幅拉高水管移速 (6 -> 14)，並將安全縫隙縮小 (280 -> 180)
+        let pipe = { x: WIDTH, width: 95, gap: 180, speed: 14, topHeight: 0 }; 
         
         let score = 0;
         let isPalmsTouching = false; 
         let testSuccessTimer = 0;
         let audioCtx = null;
 
-        // 坐姿啟動專用起立無敵狀態變數
-        let baseHipKneeDist = 0.02;      
-        let isReadyToStand = true;       
+        // 起立與無敵狀態變數
+        let baseHipKneeDist = 0.18;      
+        let wasStandingUp = false;       
         let invincibleEndTime = 0;       
         let cooldownEndTime = 0;         
-
-        // 張開雙手超過耳朵的狀態鎖
-        let hasOpenedHands = false;
 
         const PIP = { x: 30, y: 30, width: 280, height: 157 }; 
         let currentStream = null; 
@@ -146,11 +121,11 @@
                 const gain = audioCtx.createGain();
                 osc.connect(gain); gain.connect(audioCtx.destination);
                 osc.type = 'triangle'; 
-                osc.frequency.setValueAtTime(250, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(550, audioCtx.currentTime + 0.12);
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.1);
                 gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
             } catch (e) {}
         }
 
@@ -163,14 +138,15 @@
                 const gain = audioCtx.createGain();
                 osc.connect(gain); gain.connect(audioCtx.destination);
                 osc.type = 'sine'; 
-                osc.frequency.setValueAtTime(350, audioCtx.currentTime);
-                osc.frequency.linearRampToValueAtTime(850, audioCtx.currentTime + 0.3);
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(950, audioCtx.currentTime + 0.25);
                 gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-                gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+                gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.25);
             } catch (e) {}
         }
 
+        // 大絕招啟動邏輯
         function triggerShield() {
             const currentTime = performance.now();
             if (currentTime > cooldownEndTime) {
@@ -187,8 +163,8 @@
 
         function resetPipe() {
             pipe.x = WIDTH;
-            // 因應安全高度縮小，調整隨機生成的限制
-            pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
+            // 配合極窄通道，修正高度分配隨機公式
+            pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 180)) + 90;
         }
 
         function resetGame() {
@@ -197,15 +173,32 @@
             score = 0;
             invincibleEndTime = 0;
             cooldownEndTime = 0;
-            isReadyToStand = true; 
-            hasOpenedHands = false; 
+            wasStandingUp = false;
             resetPipe();
             currentState = STATES.PLAYING;
             if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         }
 
+        // 鍵盤事件監聽（完美保留核心鍵盤操控）
         window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'r' && currentState === STATES.GAMEOVER) {
+            const key = e.key.toLowerCase();
+            
+            if (key === 'r' && currentState === STATES.GAMEOVER) {
+                resetGame();
+            }
+            
+            if (currentState === STATES.PLAYING) {
+                if (e.key === ' ' || key === 'spacebar') { 
+                    e.preventDefault(); 
+                    triggerFlap();
+                }
+                if (e.key === 'ArrowUp') { 
+                    e.preventDefault();
+                    triggerShield();
+                }
+            }
+
+            if (currentState === STATES.TESTING && (e.key === ' ' || e.key === 'ArrowUp')) {
                 resetGame();
             }
         });
@@ -230,8 +223,8 @@
 
             const currentTime = performance.now();
 
-            // 1. 背景
-            canvasCtx.fillStyle = '#1a0033'; // 地獄版改為深紫色調背景
+            // 1. 背景：改為深邃的惡魔紫背景
+            canvasCtx.fillStyle = '#18002b';
             canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
 
             // 2. 骨架偵測
@@ -242,20 +235,9 @@
             if (results.poseLandmarks) {
                 const landmarks = results.poseLandmarks;
                 
+                // 擊掌偵測
                 const leftPalm = landmarks[19];  
                 const rightPalm = landmarks[20]; 
-                const leftEar = landmarks[7];   
-                const rightEar = landmarks[8];  
-
-                if (leftPalm.visibility > 0.5 && rightPalm.visibility > 0.5 && leftEar.visibility > 0.5 && rightEar.visibility > 0.5) {
-                    const earDist = Math.abs(leftEar.x - rightEar.x);
-                    const handDist = Math.abs(leftPalm.x - rightPalm.x);
-                    
-                    if (handDist > earDist * 1.5) {
-                        hasOpenedHands = true; 
-                    }
-                }
-
                 if (leftPalm.visibility > 0.5 && rightPalm.visibility > 0.5) {
                     const dx = leftPalm.x - rightPalm.x;
                     const dy = leftPalm.y - rightPalm.y;
@@ -265,19 +247,13 @@
                     if (distance < threshold) palmsCollided = true;
                 }
 
+                // 起立偵測
                 const leftHip = landmarks[23];
                 const leftKnee = landmarks[25];
                 if (leftHip.visibility > 0.5 && leftKnee.visibility > 0.5) {
                     const currentHipKneeDist = Math.abs(leftKnee.y - leftHip.y);
-                    
-                    if (currentHipKneeDist > baseHipKneeDist + 0.08) {
-                        if (isReadyToStand) {
-                            isStandingNow = true;
-                            isReadyToStand = false; 
-                        }
-                    } 
-                    else if (currentHipKneeDist < baseHipKneeDist + 0.03) {
-                        isReadyToStand = true;
+                    if (currentHipKneeDist > baseHipKneeDist * 1.05) {
+                        isStandingNow = true;
                     }
                 }
             }
@@ -293,31 +269,21 @@
                     score++;
                 }
 
+                // 體感擊掌跳躍
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
-                        if (hasOpenedHands) {
-                            triggerFlap();
-                            
-                            if (mqttClient && mqttClient.connected) {
-                                mqttClient.publish('PD', '1'); 
-                                
-                                setTimeout(() => {
-                                    mqttClient.publish('PD', '2'); 
-                                    console.log("MQTTGO 發送成功: 1 -> 2 到主題 [PD] (延遲 1 秒)");
-                                }, 1000); 
-                            }
-
-                            hasOpenedHands = false; 
-                        }
+                        triggerFlap();
                         isPalmsTouching = true;
                     }
                 } else {
                     isPalmsTouching = false;
                 }
 
-                if (isStandingNow) {
+                // 體感挺身起立無敵
+                if (isStandingNow && !wasStandingUp) {
                     triggerShield();
                 }
+                wasStandingUp = isStandingNow;
 
                 const isInvincible = currentTime < invincibleEndTime;
 
@@ -338,23 +304,23 @@
 
             // 4. 繪製元件
             if (currentState === STATES.PLAYING || currentState === STATES.GAMEOVER) {
-                // 地獄水管改為紅色系
-                canvasCtx.fillStyle = '#b30000';
+                // 水管：地獄級警示血紅色
+                canvasCtx.fillStyle = '#cf0000';
                 canvasCtx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
                 canvasCtx.fillRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
                 
-                canvasCtx.strokeStyle = '#ff3333';
+                canvasCtx.strokeStyle = '#ff4d4d';
                 canvasCtx.lineWidth = 4;
                 canvasCtx.strokeRect(pipe.x, 0, pipe.width, pipe.topHeight);
                 canvasCtx.strokeRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
 
                 // 地板
-                canvasCtx.fillStyle = '#4d2600';
+                canvasCtx.fillStyle = '#3a1a00';
                 canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
                 canvasCtx.fillStyle = '#ff3333';
                 canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
 
-                // 小鳥
+                // 小鳥：耀眼亮黃
                 canvasCtx.beginPath();
                 canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
                 canvasCtx.fillStyle = '#ffcc00';
@@ -363,14 +329,14 @@
                 canvasCtx.lineWidth = 3;
                 canvasCtx.stroke();
 
-                // 黑色防護罩特效
+                // 霓虹亮青色裂空防護罩特效
                 if (currentState === STATES.PLAYING && currentTime < invincibleEndTime) {
                     canvasCtx.save();
                     canvasCtx.beginPath();
-                    canvasCtx.arc(bird.x, bird.y, bird.radius + 12, 0, 2 * Math.PI);
-                    canvasCtx.strokeStyle = 'rgba(0, 255, 255, 0.9)'; // 地獄版改成亮青色防護罩
+                    canvasCtx.arc(bird.x, bird.y, bird.radius + 14, 0, 2 * Math.PI);
+                    canvasCtx.strokeStyle = 'rgba(0, 255, 255, 0.9)'; 
                     canvasCtx.lineWidth = 5;
-                    canvasCtx.shadowBlur = 15;
+                    canvasCtx.shadowBlur = 20;
                     canvasCtx.shadowColor = '#00ffff'; 
                     canvasCtx.stroke();
                     canvasCtx.restore();
@@ -379,7 +345,7 @@
                     canvasCtx.fillStyle = '#00ffff'; 
                     canvasCtx.font = 'bold 18px Arial';
                     canvasCtx.textAlign = 'center';
-                    canvasCtx.fillText(`無敵: ${shieldLeft}s`, bird.x, bird.y - bird.radius - 22);
+                    canvasCtx.fillText(`無敵: ${shieldLeft}s`, bird.x, bird.y - bird.radius - 24);
                 }
 
                 // 分數
@@ -395,34 +361,16 @@
                 if (currentState === STATES.PLAYING) {
                     canvasCtx.font = 'bold 22px Arial';
                     canvasCtx.textAlign = 'left';
-                    
-                    canvasCtx.save();
-                    canvasCtx.textAlign = 'right';
-                    canvasCtx.font = 'bold 20px Arial';
-                    if (hasOpenedHands) {
-                        canvasCtx.fillStyle = '#00ff00';
-                        canvasCtx.fillText("👐 預備擊掌！", WIDTH - 40, HEIGHT - 25);
-                    } else {
-                        canvasCtx.fillStyle = '#ff3333';
-                        canvasCtx.fillText("↔️ 開掌超耳！", WIDTH - 40, HEIGHT - 25);
-                    }
-                    canvasCtx.restore();
-
                     if (currentTime < invincibleEndTime) {
                         canvasCtx.fillStyle = '#00ffff';
-                        canvasCtx.fillText("🔥 無敵狀態啟動中！衝啊！", 40, HEIGHT - 25);
+                        canvasCtx.fillText("🔥 裂空防護罩超載運作中！無視一切撞擊！", 40, HEIGHT - 25);
                     } else if (currentTime < cooldownEndTime) {
                         let cdLeft = ((cooldownEndTime - currentTime) / 1000).toFixed(1);
                         canvasCtx.fillStyle = '#ff9900';
                         canvasCtx.fillText(`⏳ 冷卻中 (CD): ${cdLeft} 秒`, 40, HEIGHT - 25);
                     } else {
-                        if (isReadyToStand) {
-                            canvasCtx.fillStyle = '#00ff00';
-                            canvasCtx.fillText("🪑 蓄力完畢：[站直身子] 觸發無敵避難！", 40, HEIGHT - 25);
-                        } else {
-                            canvasCtx.fillStyle = '#00ffff';
-                            canvasCtx.fillText("🔄 請坐回椅子上重新蓄力...", 40, HEIGHT - 25);
-                        }
+                        canvasCtx.fillStyle = '#00ff00';
+                        canvasCtx.fillText("⚡ 大絕: 挺身起立 或 按 [向上鍵 ⬆️] 強制啟動無敵！", 40, HEIGHT - 25);
                     }
                 }
             }
@@ -444,7 +392,7 @@
                 let fy = PIP.y + rawLeftPalm.y * PIP.height;
                 canvasCtx.beginPath();
                 canvasCtx.arc(fx, fy, 15, 0, 2 * Math.PI);
-                canvasCtx.strokeStyle = hasOpenedHands ? 'cyan' : 'red'; 
+                canvasCtx.strokeStyle = 'cyan';
                 canvasCtx.lineWidth = 3;
                 canvasCtx.stroke();
             }
@@ -457,25 +405,26 @@
                 canvasCtx.fillStyle = '#ff3333';
                 canvasCtx.font = 'bold 45px Arial';
                 canvasCtx.textAlign = 'center';
-                canvasCtx.fillText("【 地獄暴風版：坐姿校正 】", WIDTH / 2, HEIGHT / 2 - 60);
+                canvasCtx.fillText("【 暴速地獄版：操控測試 】", WIDTH / 2, HEIGHT / 2 - 60);
 
                 canvasCtx.fillStyle = 'white';
                 canvasCtx.font = '24px Arial';
-                canvasCtx.fillText("請坐在椅子上，雙手張開超耳朵後，擊掌一次進行極限測試校正", WIDTH / 2, HEIGHT / 2);
+                canvasCtx.fillText("體感：請退後至全身入鏡，並雙手相碰一次進行校正", WIDTH / 2, HEIGHT / 2 - 10);
+                canvasCtx.fillStyle = '#ff9999';
+                canvasCtx.font = '20px Arial';
+                canvasCtx.fillText("鍵盤：可直接按下 [空白鍵] 或 [向上鍵] 瞬間越級開玩！", WIDTH / 2, HEIGHT / 2 + 30);
 
                 if (palmsCollided) {
                     if (!isPalmsTouching) {
-                        if (hasOpenedHands) {
-                            isPalmsTouching = true;
-                            testSuccessTimer = 60; 
-                            playJumpSound(); 
+                        isPalmsTouching = true;
+                        testSuccessTimer = 60; 
+                        playJumpSound(); 
 
-                            if (results.poseLandmarks) {
-                                const l = results.poseLandmarks;
-                                if (l[23] && l[25]) {
-                                    baseHipKneeDist = Math.abs(l[25].y - l[23].y);
-                                    console.log("坐姿校正成功！基準垂直高度為:", baseHipKneeDist);
-                                }
+                        if (results.poseLandmarks) {
+                            const l = results.poseLandmarks;
+                            if (l[23] && l[25]) {
+                                baseHipKneeDist = Math.abs(l[25].y - l[23].y);
+                                if(baseHipKneeDist < 0.05) baseHipKneeDist = 0.18; 
                             }
                         }
                     }
@@ -487,24 +436,24 @@
                     testSuccessTimer--;
                     canvasCtx.fillStyle = 'cyan';
                     canvasCtx.font = 'bold 28px Arial';
-                    canvasCtx.fillText("難度已全面解放！準備迎接瘋狂速度...", WIDTH / 2, HEIGHT / 2 + 80);
+                    canvasCtx.fillText("極限難度校正完畢！準備迎擊暴速風暴...", WIDTH / 2, HEIGHT / 2 + 90);
 
                     if (testSuccessTimer === 0) {
                         resetGame();
                     }
                 }
             } else if (currentState === STATES.GAMEOVER) {
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
                 canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
                 
-                canvasCtx.fillStyle = '#ff3333';
-                canvasCtx.font = 'bold 70px Arial';
+                canvasCtx.fillStyle = '#ff2222';
+                canvasCtx.font = 'bold 75px Arial';
                 canvasCtx.textAlign = 'center';
                 canvasCtx.fillText("地獄終結 - GAME OVER", WIDTH / 2, HEIGHT / 2);
                 
                 canvasCtx.fillStyle = 'white';
                 canvasCtx.font = '28px Arial';
-                canvasCtx.fillText("按下 'R' 重新挑戰極限", WIDTH / 2, HEIGHT / 2 + 60);
+                canvasCtx.fillText("按下鍵盤 'R' 鍵重新挑戰瘋狂速率", WIDTH / 2, HEIGHT / 2 + 60);
             }
         });
 
@@ -587,5 +536,3 @@
     </script>
 </body>
 </html>
-
-```
